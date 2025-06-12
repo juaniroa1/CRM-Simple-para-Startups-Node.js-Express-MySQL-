@@ -1,0 +1,125 @@
+// Proyecto: CRM Simple para Startups (Node.js + Express + MySQL)
+// ----------------------------------------------------------------------
+// Este proyecto simula un sistema de CRM básico que permite gestionar clientes,
+// sus contactos, tareas y reuniones. Es ideal para entrevistas técnicas porque
+// muestra dominio de SQL real, estructura modular en JavaScript, y comprensión
+// de arquitectura backend. Cada parte del código incluye comentarios explicativos.
+
+// Paso 1: Conexión a la base de datos
+// -----------------------------------
+// Archivo: /db/connection.js
+// Este archivo establece la conexión a la base de datos usando mysql2.
+
+const mysql = require('mysql2');
+require('dotenv').config();
+
+// Creamos el pool de conexión para poder reutilizar conexiones y mejorar el rendimiento
+const pool = mysql.createPool({
+  host: process.env.DB_HOST,         // Dirección del servidor MySQL (ej: localhost)
+  user: process.env.DB_USER,         // Usuario con permisos sobre la base
+  password: process.env.DB_PASSWORD, // Contraseña del usuario
+  database: process.env.DB_NAME      // Nombre de la base de datos que vamos a usar
+});
+
+// Exportamos una promesa para usar async/await con el pool
+const db = pool.promise();
+
+module.exports = db;
+
+
+// Paso 2: Script SQL para crear la base
+// --------------------------------------
+// Archivo: /sql/create_database.sql
+// Este script debe ejecutarse una vez para inicializar la base.
+
+/*
+CREATE DATABASE IF NOT EXISTS startup_crm;
+USE startup_crm;
+
+CREATE TABLE clients (
+  client_id INT AUTO_INCREMENT PRIMARY KEY,
+  name VARCHAR(100) NOT NULL,
+  email VARCHAR(100) UNIQUE,
+  phone VARCHAR(20),
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE contacts (
+  contact_id INT AUTO_INCREMENT PRIMARY KEY,
+  client_id INT,
+  name VARCHAR(100),
+  position VARCHAR(100),
+  email VARCHAR(100),
+  phone VARCHAR(20),
+  FOREIGN KEY (client_id) REFERENCES clients(client_id) ON DELETE CASCADE
+);
+*/
+
+
+// Paso 3: Archivo principal del servidor Express
+// -----------------------------------------------
+// Archivo: app.js
+// Este archivo arranca el servidor y configura las rutas principales.
+
+const express = require('express');
+const app = express();
+const clientRoutes = require('./routes/clients');
+
+app.use(express.json()); // Middleware para que Express entienda JSON
+
+// Definimos nuestras rutas
+app.use('/clients', clientRoutes);
+
+// Iniciamos el servidor en puerto 3000
+app.listen(3000, () => {
+  console.log('Servidor corriendo en http://localhost:3000');
+});
+
+
+// Paso 4: Ruta para /clients
+// --------------------------
+// Archivo: /routes/clients.js
+// Define las rutas relacionadas a clientes
+
+const express = require('express');
+const router = express.Router();
+const clientController = require('../controllers/clients');
+
+router.get('/', clientController.getAllClients);   // GET /clients → listar clientes
+router.post('/', clientController.createClient);   // POST /clients → crear cliente
+
+module.exports = router;
+
+
+// Paso 5: Controlador de clientes
+// -------------------------------
+// Archivo: /controllers/clients.js
+// Aquí va la lógica de negocio: consultas SQL reales con async/await
+
+const db = require('../db/connection');
+
+// Obtener todos los clientes desde la base
+exports.getAllClients = async (req, res) => {
+  try {
+    const [rows] = await db.query('SELECT * FROM clients ORDER BY created_at DESC');
+    res.json(rows);
+  } catch (err) {
+    console.error('Error al obtener clientes:', err);
+    res.status(500).json({ error: 'Error interno del servidor' });
+  }
+};
+
+// Crear un nuevo cliente
+exports.createClient = async (req, res) => {
+  const { name, email, phone } = req.body;
+  try {
+    const [result] = await db.query(
+      'INSERT INTO clients (name, email, phone) VALUES (?, ?, ?)',
+      [name, email, phone]
+    );
+    res.status(201).json({ message: 'Cliente creado', id: result.insertId });
+  } catch (err) {
+    console.error('Error al crear cliente:', err);
+    res.status(500).json({ error: 'Error al crear cliente' });
+  }
+};
